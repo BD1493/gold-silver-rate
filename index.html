@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Metal Tracker Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f8fafc; overflow-x: hidden; }
+        .glass { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .gold-glow { box-shadow: 0 0 20px rgba(234, 179, 8, 0.15); }
+        .live-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+        .chart-height { height: 320px; }
+        select, input { appearance: none; outline: none; transition: all 0.2s; }
+        .price-update { animation: flash 0.5s ease-out; }
+        @keyframes flash {
+            0% { background-color: rgba(34, 197, 94, 0.2); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+        <!-- TOP NAV -->
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4 glass p-4 rounded-2xl">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center shadow-lg gold-glow">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="text-slate-900" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold uppercase tracking-tighter">Live<span class="text-yellow-500">Metal</span></h1>
+                    <div class="flex items-center gap-2">
+                        <span id="statusDot" class="live-dot w-2 h-2 rounded-full bg-slate-500"></span>
+                        <span id="statusText" class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Awaiting API Key</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-1 max-w-md px-4">
+                <input type="password" id="apiKeyInput" placeholder="Enter Metals.dev API Key..." 
+                    class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-yellow-500 text-yellow-500"
+                    onchange="saveApiKey()">
+            </div>
+
+            <div class="flex gap-4 items-center">
+                <div class="text-right hidden md:block mr-4">
+                    <p id="clock" class="text-sm font-mono font-bold text-slate-300">00:00:00</p>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Local Time</p>
+                </div>
+                <select id="currencySelector" class="bg-slate-800 text-sm font-bold border-none rounded-xl px-4 py-2 outline-none cursor-pointer" onchange="updateDashboard()">
+                    <option value="USD">USD ($)</option>
+                    <option value="INR">INR (₹)</option>
+                    <option value="AED">AED (د.إ)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- SIDEBAR -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Gold Card -->
+                <div id="goldCard" class="glass p-5 rounded-3xl border-l-4 border-yellow-500 gold-glow">
+                    <div class="flex justify-between items-start mb-1">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">Gold Spot</p>
+                        <select id="goldUnit" onchange="updateDashboard()" class="text-[9px] bg-slate-800 px-2 py-0.5 rounded border border-slate-700 font-bold uppercase outline-none">
+                            <option value="1">1 Gram</option>
+                            <option value="10">10 Grams</option>
+                            <option value="1000">1 Kilo</option>
+                        </select>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <h2 id="goldPrice" class="text-2xl font-black text-yellow-500">$0.00</h2>
+                    </div>
+                </div>
+
+                <!-- Silver Card -->
+                <div id="silverCard" class="glass p-5 rounded-3xl border-l-4 border-slate-400">
+                    <div class="flex justify-between items-start mb-1">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">Silver Spot</p>
+                        <select id="silverUnit" onchange="updateDashboard()" class="text-[9px] bg-slate-800 px-2 py-0.5 rounded border border-slate-700 font-bold uppercase outline-none">
+                            <option value="1">1 Gram</option>
+                            <option value="10">10 Grams</option>
+                            <option value="1000">1 Kilo</option>
+                        </select>
+                    </div>
+                    <div class="flex items-baseline gap-2">
+                        <h2 id="silverPrice" class="text-2xl font-black text-slate-200">$0.00</h2>
+                    </div>
+                </div>
+
+                <!-- Calculator -->
+                <div class="glass p-5 rounded-3xl">
+                    <h3 class="text-xs font-bold uppercase text-slate-400 mb-4">Value Calculator</h3>
+                    <div class="space-y-3">
+                        <input type="number" id="weightInput" value="1" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" oninput="calculate()">
+                        <div class="flex gap-2">
+                            <select id="calcMetal" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" onchange="calculate()">
+                                <option value="gold">Gold</option>
+                                <option value="silver">Silver</option>
+                            </select>
+                            <select id="calcUnit" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm" onchange="calculate()">
+                                <option value="1">Grams</option>
+                                <option value="1000">Kilos</option>
+                            </select>
+                        </div>
+                        <div class="pt-2">
+                            <p class="text-[10px] text-slate-500 uppercase">Total Value</p>
+                            <p id="totalVal" class="text-2xl font-black text-yellow-500">$0.00</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN CHART -->
+            <div class="lg:col-span-3">
+                <div class="glass p-6 rounded-3xl h-full">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-lg">Market Live Tracking</h3>
+                        <div id="apiStatus" class="text-[10px] font-bold uppercase px-3 py-1 bg-slate-800 rounded-full border border-slate-700">
+                            Offline Mode
+                        </div>
+                    </div>
+                    <div class="chart-height">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let USER_API_KEY = "";
+        let chart;
+        
+        const STATE = {
+            goldBase: 84.50, 
+            silverBase: 1.05,
+            history: {
+                labels: Array(12).fill(""),
+                gold: Array(12).fill(84.50),
+                silver: Array(12).fill(1.05)
+            }
+        };
+
+        const CURRENCIES = {
+            USD: { rate: 1, sym: '$' },
+            INR: { rate: 86.50, sym: '₹' },
+            AED: { rate: 3.67, sym: 'AED ' }
+        };
+
+        function saveApiKey() {
+            const input = document.getElementById('apiKeyInput');
+            if (!input) return;
+            USER_API_KEY = input.value.trim();
+            if (USER_API_KEY) {
+                const statusTxt = document.getElementById('statusText');
+                if (statusTxt) statusTxt.textContent = "Connecting...";
+                fetchLivePrices();
+            }
+        }
+
+        async function fetchLivePrices() {
+            if (!USER_API_KEY) return;
+
+            try {
+                const url = `https://api.metals.dev/v1/latest?api_key=${USER_API_KEY}&currency=USD&unit=g`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === "success" && data.metals) {
+                    STATE.goldBase = data.metals.gold;
+                    STATE.silverBase = data.metals.silver;
+
+                    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    STATE.history.labels.shift();
+                    STATE.history.labels.push(now);
+                    STATE.history.gold.shift();
+                    STATE.history.gold.push(STATE.goldBase);
+                    STATE.history.silver.shift();
+                    STATE.history.silver.push(STATE.silverBase);
+
+                    const dot = document.getElementById('statusDot');
+                    const txt = document.getElementById('statusText');
+                    const apiTag = document.getElementById('apiStatus');
+
+                    if (dot) dot.className = "live-dot w-2 h-2 rounded-full bg-green-500";
+                    if (txt) txt.textContent = "Live Stream Active";
+                    if (apiTag) {
+                        apiTag.textContent = "Synced";
+                        apiTag.classList.add('text-green-400');
+                    }
+                    
+                    triggerVisualUpdate();
+                    updateDashboard();
+                } else {
+                    throw new Error("Invalid Key");
+                }
+            } catch (e) {
+                const txt = document.getElementById('statusText');
+                const dot = document.getElementById('statusDot');
+                if (txt) txt.textContent = "Key Error - Check Connection";
+                if (dot) dot.className = "w-2 h-2 rounded-full bg-red-500";
+                console.error(e);
+            }
+        }
+
+        function marketHeartbeat() {
+            // Simulated micro-movement
+            const goldMove = (Math.random() - 0.5) * 0.02;
+            const silverMove = (Math.random() - 0.5) * 0.005;
+            
+            STATE.goldBase += goldMove;
+            STATE.silverBase += silverMove;
+            
+            STATE.history.gold[STATE.history.gold.length - 1] = STATE.goldBase;
+            STATE.history.silver[STATE.history.silver.length - 1] = STATE.silverBase;
+            
+            updateDashboard();
+        }
+
+        function triggerVisualUpdate() {
+            const gCard = document.getElementById('goldCard');
+            const sCard = document.getElementById('silverCard');
+            if (gCard) gCard.classList.add('price-update');
+            if (sCard) sCard.classList.add('price-update');
+            setTimeout(() => {
+                if (gCard) gCard.classList.remove('price-update');
+                if (sCard) sCard.classList.remove('price-update');
+            }, 500);
+        }
+
+        function calculate() {
+            const currencySelector = document.getElementById('currencySelector');
+            const weightInput = document.getElementById('weightInput');
+            const calcMetal = document.getElementById('calcMetal');
+            const calcUnit = document.getElementById('calcUnit');
+            const totalVal = document.getElementById('totalVal');
+
+            if (!currencySelector || !weightInput || !calcMetal || !calcUnit || !totalVal) return;
+
+            const curr = CURRENCIES[currencySelector.value];
+            const weight = parseFloat(weightInput.value) || 0;
+            const metal = calcMetal.value;
+            const unitMultiplier = parseFloat(calcUnit.value);
+            
+            const base = metal === 'gold' ? STATE.goldBase : STATE.silverBase;
+            const total = (base * weight * unitMultiplier) * curr.rate;
+            
+            totalVal.textContent = `${curr.sym}${total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        }
+
+        function updateDashboard() {
+            const currencySelector = document.getElementById('currencySelector');
+            const goldUnit = document.getElementById('goldUnit');
+            const silverUnit = document.getElementById('silverUnit');
+            const goldPrice = document.getElementById('goldPrice');
+            const silverPrice = document.getElementById('silverPrice');
+
+            if (!currencySelector || !goldUnit || !silverUnit || !goldPrice || !silverPrice || !chart) return;
+
+            const curr = CURRENCIES[currencySelector.value];
+            const gUnit = parseFloat(goldUnit.value);
+            const sUnit = parseFloat(silverUnit.value);
+
+            goldPrice.textContent = `${curr.sym}${parseFloat(STATE.goldBase * gUnit * curr.rate).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            silverPrice.textContent = `${curr.sym}${parseFloat(STATE.silverBase * sUnit * curr.rate).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+            chart.data.labels = STATE.history.labels;
+            chart.data.datasets[0].data = STATE.history.gold.map(v => v * gUnit * curr.rate);
+            chart.data.datasets[1].data = STATE.history.silver.map(v => v * sUnit * curr.rate);
+            
+            const silverValues = chart.data.datasets[1].data;
+            chart.options.scales.y1.min = Math.min(...silverValues) * 0.999;
+            chart.options.scales.y1.max = Math.max(...silverValues) * 1.001;
+
+            chart.update('none'); 
+            calculate();
+        }
+
+        function initChart() {
+            const canvas = document.getElementById('mainChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: STATE.history.labels,
+                    datasets: [{
+                        label: 'Gold',
+                        data: STATE.history.gold,
+                        borderColor: '#fbbf24',
+                        borderWidth: 3,
+                        fill: true,
+                        backgroundColor: 'rgba(251, 191, 36, 0.05)',
+                        tension: 0.3,
+                        pointRadius: 2,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Silver',
+                        data: STATE.history.silver,
+                        borderColor: '#94a3b8',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        pointRadius: 2,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#475569' } },
+                        y: { position: 'left', ticks: { color: '#fbbf24', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.02)' } },
+                        y1: { position: 'right', ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        window.onload = () => {
+            initChart();
+            setInterval(() => {
+                const clock = document.getElementById('clock');
+                if (clock) clock.textContent = new Date().toLocaleTimeString();
+            }, 1000);
+            setInterval(marketHeartbeat, 2000);
+            setInterval(fetchLivePrices, 60000);
+            updateDashboard();
+        };
+    </script>
+</body>
+</html>
